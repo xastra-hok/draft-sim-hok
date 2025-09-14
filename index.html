@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>HOK Draft Simulator</title>
+  <style>
+    body {
+      background: #121212;
+      color: #fff;
+      font-family: sans-serif;
+      text-align: center;
+      margin: 0;
+      padding: 20px;
+    }
+    .container {
+      max-width: 1000px;
+      margin: auto;
+    }
+    .team-area {
+      display: flex;
+      justify-content: space-between;
+      margin: 20px 0;
+    }
+    .team {
+      width: 48%;
+      background: #1e1e1e;
+      padding: 10px;
+      border-radius: 10px;
+    }
+    .picks, .bans {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+      min-height: 74px;
+      align-items: center;
+    }
+    .champion-pool {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+      gap: 10px;
+      margin-top: 20px;
+       max-height: 500px;
+      overflow-y: auto;
+    }
+    .champion {
+      background: #333;
+      padding: 8px;
+      border-radius: 8px;
+      text-align: center;
+      cursor: pointer;
+      transition: 0.2s;
+      user-select: none;
+    }
+    .champion:hover {
+      background: #555;
+    }
+    .champion.disabled {
+      background: #444;
+      opacity: 0.2;
+      cursor: not-allowed;
+    }
+    .champion img {
+      width: 64px;
+      height: 64px;
+      border-radius: 4px;
+      pointer-events: none;
+    }
+    .champion-name {
+      font-size: 0.85rem;
+      margin-top: 5px;
+      user-select: none;
+    }
+    .status {
+      font-size: 1.2rem;
+      margin-top: 10px;
+    }
+    /* Ban and Pick thumbnails */
+    .ban, .pick {
+      width: 64px;
+      height: 64px;
+      border-radius: 8px;
+      overflow: hidden;
+      box-sizing: border-box;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      cursor: default;
+      position: relative;
+    }
+    .ban {
+      border: 3px solid #f44336;
+      box-shadow: 0 0 8px #f44336;
+    }
+    .pick {
+      border: 3px solid #4caf50;
+      box-shadow: 0 0 8px #4caf50;
+    }
+    .ban img, .pick img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      pointer-events: none;
+    }
+    /* Tooltip on bans/picks for champion name */
+    .ban[title], .pick[title] {
+      position: relative;
+    }
+    .ban[title]:hover::after, .pick[title]:hover::after {
+      content: attr(title);
+      position: absolute;
+      bottom: 110%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.8);
+      color: #fff;
+      padding: 4px 8px;
+      border-radius: 4px;
+      white-space: nowrap;
+      pointer-events: none;
+      font-size: 0.85rem;
+      z-index: 10;
+      opacity: 1;
+    }
+
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>HOK Draft Simulator</h1>
+    <div class="status" id="status">Blue Team: Ban</div>
+
+    <div class="team-area">
+      <div class="team" id="blue-team">
+        <h2>Blue Team</h2>
+        <div>Bans:</div>
+        <div class="bans" id="blue-bans"></div>
+        <div>Picks:</div>
+        <div class="picks" id="blue-picks"></div>
+      </div>
+      <div class="team" id="red-team">
+        <h2>Red Team</h2>
+        <div>Bans:</div>
+        <div class="bans" id="red-bans"></div>
+        <div>Picks:</div>
+        <div class="picks" id="red-picks"></div>
+      </div>
+    </div>
+
+    <h3>Hero Pool</h3>
+    <div class="champion-pool" id="champion-pool"></div>
+
+    <h3>Disabled Heroes</h3>
+    <div class="champion-pool" id="disabled-pool"></div>
+    
+    <div style="text-align: center; margin-top: 40px;">
+    <button id="reset-btn">Reset Draft</button>
+  </div>
+
+  <script>
+    const version = "13.18.1";
+    const champions = [
+      "Agudo", "Alessio", "Allain", "Angela", "Ao'Yin", "Arke",
+      "Arli","Arthur","Ata","Athena","Augran","Bai Qi","Biron",
+      "Butterfly","Cai Yan","Chano","Charlotte","Cirrus","Consort Yu",
+      "Da Qiao","Daji","Dharma","Di Renjie","Dian Wei","Diaochan",
+      "Dolia","Donghuang","Dr Bian","Dun","Dyadia","Erin","Fang",
+      "Fatih","Feyd","Flowborn Mage","Flowborn Marksman","Flowborn Tank",
+      "Fuzi","Gan & Mo","Gao","Gao Changgong","Garo","Guan Yu","Guiguzi",
+      "Han Xin","Heino","Hou Yi","Huang Zhong","Jing","Kaizer","Kongming",
+      "Kui","Lady Sun","Lady Zhen","Lam","Li Bai","Li Xin","Lian Po",
+      "Liang","Liu Bang","Liu Bei","Liu Shan","Lu Bu","Luara",
+      "Luban No.7","Luna","Mai Shiranui","Marco Polo","Mayene","Meng Ya",
+      "Menki","Mi Yue","Milady","Ming","Mozi","Mulan","Musashi","Nakoruru",
+      "Nezha","Nuwa","Pei","Sakeer","Shangguan","Shi","Shouyue","Sima Yi",
+      "Sun Bin","Sun Ce","Ukyo Tachibana","Wang Zhaojun","Wukong","Wuyan",
+      "Xiang Yu","Xiao Qiao","Xuance","Yang Jian","Yao","Yaria","Ying",
+      "Yixing","Yuhuan","Zhang Fei","Zhou Yu","Zhuangzi","Zilong","Ziya"
+    ];
+
+    const phaseOrder = [
+      // First ban phase: 2 bans each (4 bans)
+      { team: "blue", type: "ban" },
+      { team: "red", type: "ban" },
+      { team: "blue", type: "ban" },
+      { team: "red", type: "ban" },
+
+      // Picks phase (first picks)
+      { team: "blue", type: "pick" },
+      { team: "red", type: "pick" },
+      { team: "red", type: "pick" },
+      { team: "blue", type: "pick" },
+      { team: "blue", type: "pick" },
+      { team: "red", type: "pick" },
+
+      // Second ban phase: 1 ban each (2 bans)
+      { team: "red", type: "ban" },
+      { team: "blue", type: "ban" },
+      { team: "red", type: "ban" },
+      { team: "blue", type: "ban" },
+
+      // Final picks phase (finish picks)
+      { team: "red", type: "pick" },
+      { team: "blue", type: "pick" },
+      { team: "blue", type: "pick" },
+      { team: "red", type: "pick" },
+    ];
+
+    let currentPhase = 0;
+
+    function capitalize(str) {
+      return str.charAt(0).toUpperCase() + str.slice(1);
+    }
+
+    function updateStatus() {
+      if (currentPhase >= phaseOrder.length) {
+        document.getElementById("status").textContent = "Draft Complete!";
+        return;
+      }
+      const { team, type } = phaseOrder[currentPhase];
+      document.getElementById("status").textContent =
+        `${capitalize(team)} Team: ${capitalize(type)}`;
+    }
+
+function createChampion(name) {
+  const div = document.createElement("div");
+  div.classList.add("champion");
+  div.dataset.name = name;
+
+  const img = document.createElement("img");
+  img.src = `hero/${name}.png`;
+  img.alt = name;
+  img.onerror = () => { img.src = "hero/placeholder.png"; };
+
+  const label = document.createElement("div");
+  label.className = "champion-name";
+  label.textContent = name;
+
+  const toggleBtn = document.createElement("button");
+  toggleBtn.textContent = "Disable";
+  toggleBtn.style.marginTop = "5px";
+  toggleBtn.style.fontSize = "0.7rem";
+  toggleBtn.style.padding = "3px 6px";
+  toggleBtn.style.border = "none";
+  toggleBtn.style.borderRadius = "4px";
+  toggleBtn.style.cursor = "pointer";
+  toggleBtn.style.backgroundColor = "#f44336";
+  toggleBtn.style.color = "#fff";
+
+  toggleBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+
+    const championPool = document.getElementById("champion-pool");
+    const disabledPool = document.getElementById("disabled-pool");
+
+    if (div.classList.contains("manually-disabled")) {
+      // Enable
+      div.classList.remove("manually-disabled");
+      toggleBtn.textContent = "Disable";
+      toggleBtn.style.backgroundColor = "#f44336";
+      championPool.appendChild(div);
+    } else {
+      // Disable
+      div.classList.add("manually-disabled");
+      toggleBtn.textContent = "Enable";
+      toggleBtn.style.backgroundColor = "#4caf50";
+      disabledPool.appendChild(div);
+    }
+  });
+
+  div.appendChild(img);
+  div.appendChild(label);
+  div.appendChild(toggleBtn);
+
+  div.addEventListener("click", () => handleChampionClick(name, div));
+
+  return div;
+  
+}
+
+
+
+    function handleChampionClick(name, el) {
+      if (el.classList.contains("disabled") || currentPhase >= phaseOrder.length) return;
+
+      const { team, type } = phaseOrder[currentPhase];
+      const targetEl = document.getElementById(`${team}-${type}s`);
+
+      // Create image element for ban or pick
+      const champDiv = document.createElement("div");
+      champDiv.classList.add(type === "pick" ? "pick" : "ban");
+      champDiv.title = name; // tooltip on hover
+
+      const img = document.createElement("img");
+      img.src = `hero/${name}.png`;
+      img.alt = name;
+
+      champDiv.appendChild(img);
+      targetEl.appendChild(champDiv);
+
+      el.classList.add("disabled");
+      currentPhase++;
+      updateStatus();
+    }
+
+   function resetDraft() {
+  currentPhase = 0;
+  updateStatus();
+
+  // Clear picks and bans
+  document.getElementById("blue-bans").innerHTML = "";
+  document.getElementById("red-bans").innerHTML = "";
+  document.getElementById("blue-picks").innerHTML = "";
+  document.getElementById("red-picks").innerHTML = "";
+
+  const championPool = document.getElementById("champion-pool");
+  const disabledPool = document.getElementById("disabled-pool");
+
+  // Clear both pools
+  championPool.innerHTML = "";
+  disabledPool.innerHTML = "";
+
+  // Re-create all champions in original order
+  champions.forEach(name => {
+    const champ = createChampion(name);
+    championPool.appendChild(champ);
+  });
+}
+
+    function init() {
+      const pool = document.getElementById("champion-pool");
+      champions.forEach(name => {
+        const champ = createChampion(name);
+        pool.appendChild(champ);
+      });
+      updateStatus();
+
+      document.getElementById("reset-btn").addEventListener("click", resetDraft);
+    }
+
+    init();
+  </script>
+</body>
+</html>
